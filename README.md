@@ -4,7 +4,8 @@ Proofly is a Web3 mini-app that turns Base transactions into human-readable, sha
 
 ## What is here
 
-- `app/`: Next.js frontend using wagmi + viem.
+- `app/`: Next.js app router directory.
+- `/`: Next.js frontend project root using wagmi + viem.
 - `contracts/`: Foundry smart contracts (Base Sepolia for MVP).
 - `app-summary.md`: Product requirements and UX goals.
 
@@ -13,11 +14,10 @@ Proofly is a Web3 mini-app that turns Base transactions into human-readable, sha
 ### Frontend (Next.js)
 
 ```bash
-cd app
 npm install
 ```
 
-Create `app/.env.local` (example values shown below):
+Create `.env.local` (example values shown below):
 
 ```bash
 NEXT_PUBLIC_CONTRACT_ADDRESS=0xYourContractAddress
@@ -49,5 +49,5 @@ For deployments, set `BASE_SEPOLIA_RPC_URL` and `PRIVATE_KEY` in `contracts/.env
 
 ## Learn more
 
-- Frontend details: `app/README.md`
+- Frontend details: `README.frontend.md`
 - Contracts usage: `contracts/README.md`
