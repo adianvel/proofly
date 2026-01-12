@@ -56,9 +56,6 @@ export default function LandingPage() {
             <a href="https://sepolia.basescan.org" target="_blank" rel="noreferrer" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Explorer
             </a>
-            <a href="#" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Docs
-            </a>
           </nav>
 
           {/* Right: Connect Wallet */}
