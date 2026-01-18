@@ -212,6 +212,34 @@ export default function CreatePage() {
         <div className="lg:col-span-3">
           <div className="rounded-xl border border-border bg-card p-6">
             <div className="space-y-5">
+              {/* Chain Selector */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Network</label>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground focus:border-accent focus:outline-none cursor-pointer"
+                    value={chainId}
+                    onChange={(e) => {
+                      const selectedChainId = Number(e.target.value);
+                      if (selectedChainId !== chainId) {
+                        switchChain({ chainId: selectedChainId });
+                      }
+                    }}
+                    disabled={isSwitching}
+                  >
+                    <option value={baseSepolia.id}>Base Sepolia (Testnet)</option>
+                  </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                    <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                {!isOnBaseSepolia && isConnected && (
+                  <p className="text-xs text-error">Your wallet is on a different network. Select a network above to switch.</p>
+                )}
+              </div>
+
               {/* Title Input */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Title</label>
@@ -223,24 +251,30 @@ export default function CreatePage() {
                 />
               </div>
 
-              {/* Token Input */}
+              {/* Token Selector */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">
-                  Token address <span className="text-muted-foreground font-normal">(optional)</span>
+                  Token <span className="text-muted-foreground font-normal">(select currency)</span>
                 </label>
-                <input
-                  className={`w-full rounded-lg border bg-background px-4 py-3 font-mono text-sm placeholder:text-muted-foreground focus:outline-none ${tokenTrimmed.length === 0
-                    ? "border-border focus:border-accent"
-                    : isTokenValid
-                      ? "border-border focus:border-accent"
-                      : "border-error focus:border-error"
-                    }`}
-                  placeholder="0x... (ERC20)"
-                  value={tokenAddress}
-                  onChange={(e) => setTokenAddress(e.target.value)}
-                  spellCheck={false}
-                />
-                <p className="text-xs text-muted-foreground">Leave empty to send ETH.</p>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground focus:border-accent focus:outline-none cursor-pointer"
+                    value={tokenAddress}
+                    onChange={(e) => setTokenAddress(e.target.value)}
+                  >
+                    <option value="">ETH</option>
+                    <option value="0x036CbD53842c5426634e7929541eC2318f3dCF7e">USDC</option>
+                    <option value="0x4200000000000000000000000000000000000006">WETH</option>
+                  </select>
+                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                    <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {tokenAddress === "" ? "Send ETH" : `Send ${tokenSymbolSafe} token`}
+                </p>
               </div>
 
               {/* Recipient & Amount */}
@@ -389,8 +423,8 @@ export default function CreatePage() {
                 {isTokenMode && (
                   <div className="col-span-2">
                     <p className="text-xs text-muted-foreground">Token</p>
-                    <p className="font-mono text-sm text-foreground break-all">
-                      {tokenTrimmed || "0x..."}
+                    <p className="font-medium text-foreground">
+                      {tokenSymbolSafe}
                     </p>
                   </div>
                 )}
