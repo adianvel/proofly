@@ -16,6 +16,18 @@ function txUrl(hash: `0x${string}`) {
   return `https://sepolia.basescan.org/tx/${hash}`;
 }
 
+// Receipt Templates for quick selection
+const RECEIPT_TEMPLATES = [
+  { id: 'coffee', emoji: '☕', label: 'Coffee', title: 'Coffee', note: 'Paid for coffee' },
+  { id: 'lunch', emoji: '🍱', label: 'Lunch', title: 'Lunch', note: 'Paid for lunch' },
+  { id: 'rent', emoji: '🏠', label: 'Rent', title: 'Rent Payment', note: 'Monthly rent payment' },
+  { id: 'reimburse', emoji: '💰', label: 'Reimburse', title: 'Reimbursement', note: 'Expense reimbursement' },
+  { id: 'transfer', emoji: '💸', label: 'Transfer', title: 'Transfer', note: '' },
+];
+
+
+const IDRX_TOKEN_ADDRESS = "0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22";
+
 export default function CreatePage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -27,6 +39,7 @@ export default function CreatePage() {
   const [tokenAddress, setTokenAddress] = useState("");
   const [amountEth, setAmountEth] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [receiptMode, setReceiptMode] = useState<"standard" | "idrx">("standard");
 
   const { writeContract: writeReceipt, data: receiptHash, isPending: isSubmitting, error: writeError } = useWriteContract();
   const { writeContract: writeApproval, data: approvalHash, isPending: isApproving, error: approvalError } = useWriteContract();
@@ -34,6 +47,7 @@ export default function CreatePage() {
   const { isLoading: isApprovalConfirming, isSuccess: isApprovalConfirmed } = useWaitForTransactionReceipt({ hash: approvalHash });
 
   const isOnBaseSepolia = chainId === baseSepolia.id;
+  const isIdrxMode = receiptMode === "idrx";
   const recipientTrimmed = recipient.trim();
   const titleTrimmed = title.trim();
   const noteTrimmed = note.trim();
@@ -48,7 +62,7 @@ export default function CreatePage() {
     abi: erc20Abi,
     functionName: "decimals",
     query: {
-      enabled: isTokenValid,
+      enabled: isTokenValid && !isIdrxMode,
     },
   });
 
@@ -57,7 +71,7 @@ export default function CreatePage() {
     abi: erc20Abi,
     functionName: "symbol",
     query: {
-      enabled: isTokenValid,
+      enabled: isTokenValid && !isIdrxMode,
     },
   });
 
@@ -67,13 +81,17 @@ export default function CreatePage() {
     functionName: "allowance",
     args: [(address ?? zeroAddress) as `0x${string}`, CONTRACT_ADDRESS],
     query: {
-      enabled: isTokenValid && Boolean(address),
+      enabled: isTokenValid && Boolean(address) && !isIdrxMode,
     },
   });
 
   const tokenDecimalsValue = Number(tokenDecimals ?? 18);
   const tokenDecimalsSafe = Number.isFinite(tokenDecimalsValue) ? tokenDecimalsValue : 18;
-  const tokenSymbolSafe = typeof tokenSymbol === "string" && tokenSymbol.length > 0 ? tokenSymbol : "TOKEN";
+  const tokenSymbolSafe = typeof tokenSymbol === "string" && tokenSymbol.length > 0
+    ? tokenSymbol
+    : isIdrxMode
+      ? "IDRX"
+      : "TOKEN";
 
   let parsedAmount: bigint | null = null;
   try {
@@ -85,6 +103,7 @@ export default function CreatePage() {
   }
 
   const needsApproval =
+    !isIdrxMode &&
     isTokenMode &&
     isTokenValid &&
     parsedAmount !== null &&
@@ -101,12 +120,19 @@ export default function CreatePage() {
   const approvalPending = isApproving || isApprovalConfirming;
   const amountLabel = isTokenMode ? `Amount (${tokenSymbolSafe})` : "Amount (ETH)";
   const errorMessage = formError ?? approvalError?.message ?? writeError?.message;
+  const previewNetworkLabel = isIdrxMode ? "Base Mainnet (Coming Soon)" : "Base Sepolia";
 
   useEffect(() => {
     if (isApprovalConfirmed) {
       refetchAllowance();
     }
   }, [isApprovalConfirmed, refetchAllowance]);
+
+  useEffect(() => {
+    if (isIdrxMode) {
+      setTokenAddress(IDRX_TOKEN_ADDRESS);
+    }
+  }, [isIdrxMode]);
 
   const { data: myReceiptIds } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -141,6 +167,8 @@ export default function CreatePage() {
 
   const submit = () => {
     setFormError(null);
+
+    if (isIdrxMode) return;
 
     if (!isConnected) return setFormError("Please connect your wallet first.");
     if (!isOnBaseSepolia) return setFormError("Please switch to Base Sepolia network.");
@@ -190,8 +218,38 @@ export default function CreatePage() {
         </p>
       </div>
 
+      <div className="rounded-xl border border-border bg-card p-4">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Receipt Mode</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className={`rounded-lg border px-4 py-3 text-left text-sm transition-colors ${!isIdrxMode
+              ? "border-foreground bg-foreground text-background"
+              : "border-border bg-background text-foreground hover:bg-muted"}`}
+            onClick={() => setReceiptMode("standard")}
+          >
+            <p className="font-medium">Standard Receipt</p>
+            <p className={`mt-1 text-xs ${!isIdrxMode ? "text-background/80" : "text-muted-foreground"}`}>
+              Create on Base Sepolia testnet
+            </p>
+          </button>
+          <button
+            type="button"
+            className={`rounded-lg border px-4 py-3 text-left text-sm transition-colors ${isIdrxMode
+              ? "border-foreground bg-foreground text-background"
+              : "border-border bg-background text-foreground hover:bg-muted"}`}
+            onClick={() => setReceiptMode("idrx")}
+          >
+            <p className="font-medium">IDRX Receipt (Coming Soon)</p>
+            <p className={`mt-1 text-xs ${isIdrxMode ? "text-background/80" : "text-muted-foreground"}`}>
+              Settlement available on Base mainnet
+            </p>
+          </button>
+        </div>
+      </div>
+
       {/* Network Warning */}
-      {!isOnBaseSepolia && isConnected && (
+      {!isIdrxMode && !isOnBaseSepolia && isConnected && (
         <div className="rounded-xl border border-error/20 bg-error/5 p-4">
           <p className="text-sm font-medium text-error">Wrong network</p>
           <p className="mt-1 text-sm text-error/80">
@@ -210,6 +268,27 @@ export default function CreatePage() {
       <div className="grid gap-8 lg:grid-cols-5">
         {/* Form Section */}
         <div className="lg:col-span-3">
+          {/* Quick Templates */}
+          <div className="mb-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Quick Templates</p>
+            <div className="flex flex-wrap gap-2">
+              {RECEIPT_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => {
+                    setTitle(template.title);
+                    setNote(template.note);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-card hover:bg-muted hover:border-accent transition-all"
+                >
+                  <span>{template.emoji}</span>
+                  <span>{template.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-xl border border-border bg-card p-6">
             <div className="space-y-5">
               {/* Chain Selector */}
@@ -238,6 +317,9 @@ export default function CreatePage() {
                 {!isOnBaseSepolia && isConnected && (
                   <p className="text-xs text-error">Your wallet is on a different network. Select a network above to switch.</p>
                 )}
+                {isIdrxMode && (
+                  <p className="text-xs text-muted-foreground">Settlement available on Base mainnet.</p>
+                )}
               </div>
 
               {/* Title Input */}
@@ -261,8 +343,10 @@ export default function CreatePage() {
                     className="w-full appearance-none rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground focus:border-accent focus:outline-none cursor-pointer"
                     value={tokenAddress}
                     onChange={(e) => setTokenAddress(e.target.value)}
+                    disabled={isIdrxMode}
                   >
                     <option value="">ETH</option>
+                    <option value={IDRX_TOKEN_ADDRESS}>IDRX</option>
                     <option value="0x036CbD53842c5426634e7929541eC2318f3dCF7e">USDC</option>
                     <option value="0x4200000000000000000000000000000000000006">WETH</option>
                   </select>
@@ -341,6 +425,7 @@ export default function CreatePage() {
               <button
                 className="w-full rounded-lg bg-foreground py-3.5 text-sm font-medium text-background hover:opacity-90 transition-opacity disabled:opacity-60"
                 disabled={
+                  isIdrxMode ||
                   !isConnected ||
                   !isOnBaseSepolia ||
                   isSubmitting ||
@@ -350,7 +435,13 @@ export default function CreatePage() {
                 }
                 onClick={submit}
               >
-                {isSubmitting ? "Confirm in wallet…" : isConfirming ? "Creating receipt…" : "Create Receipt"}
+                {isIdrxMode
+                  ? "Settlement available on Base mainnet"
+                  : isSubmitting
+                    ? "Confirm in wallet..."
+                    : isConfirming
+                      ? "Creating receipt..."
+                      : "Create Receipt"}
               </button>
 
               <p className="text-xs text-muted-foreground text-center">
@@ -418,7 +509,7 @@ export default function CreatePage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Network</p>
-                  <p className="font-medium text-foreground">Base Sepolia</p>
+                  <p className="font-medium text-foreground">{previewNetworkLabel}</p>
                 </div>
                 {isTokenMode && (
                   <div className="col-span-2">
