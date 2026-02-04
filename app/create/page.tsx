@@ -46,6 +46,9 @@ export default function CreatePage() {
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: receiptHash });
   const { isLoading: isApprovalConfirming, isSuccess: isApprovalConfirmed } = useWaitForTransactionReceipt({ hash: approvalHash });
 
+  // Track if we're in the middle of approve-then-create flow
+  const [pendingCreateAfterApproval, setPendingCreateAfterApproval] = useState(false);
+
   const isOnBaseSepolia = chainId === baseSepolia.id;
   const isIdrxMode = receiptMode === "idrx";
   const recipientTrimmed = recipient.trim();
@@ -122,11 +125,30 @@ export default function CreatePage() {
   const errorMessage = formError ?? approvalError?.message ?? writeError?.message;
   const previewNetworkLabel = isIdrxMode ? "Base Mainnet (Coming Soon)" : "Base Sepolia";
 
+  // After approval is confirmed, auto-trigger create receipt
   useEffect(() => {
-    if (isApprovalConfirmed) {
-      refetchAllowance();
+    if (isApprovalConfirmed && pendingCreateAfterApproval) {
+      refetchAllowance().then(() => {
+        setPendingCreateAfterApproval(false);
+        // Auto-submit the receipt creation
+        if (isTokenMode && isTokenValid && parsedAmount && parsedAmount > 0n) {
+          writeReceipt({
+            address: CONTRACT_ADDRESS,
+            abi: onchainReceiptAbi,
+            functionName: "createReceiptWithToken",
+            args: [
+              tokenTrimmed as `0x${string}`,
+              recipientTrimmed as `0x${string}`,
+              parsedAmount,
+              titleTrimmed,
+              noteTrimmed,
+            ],
+            chainId: baseSepolia.id,
+          });
+        }
+      });
     }
-  }, [isApprovalConfirmed, refetchAllowance]);
+  }, [isApprovalConfirmed, pendingCreateAfterApproval, refetchAllowance, isTokenMode, isTokenValid, parsedAmount, tokenTrimmed, recipientTrimmed, titleTrimmed, noteTrimmed, writeReceipt]);
 
   useEffect(() => {
     if (isIdrxMode) {
@@ -147,24 +169,6 @@ export default function CreatePage() {
   const latestReceiptId =
     myReceiptIds && myReceiptIds.length > 0 ? myReceiptIds[myReceiptIds.length - 1] : undefined;
 
-  const approveToken = () => {
-    setFormError(null);
-
-    if (!isConnected) return setFormError("Please connect your wallet first.");
-    if (!isOnBaseSepolia) return setFormError("Please switch to Base Sepolia network.");
-    if (!isTokenMode) return setFormError("Please enter a token address.");
-    if (!isTokenValid) return setFormError("Please enter a valid token address.");
-    if (!parsedAmount || parsedAmount === 0n) return setFormError("Please enter a token amount.");
-
-    writeApproval({
-      address: tokenTrimmed as `0x${string}`,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [CONTRACT_ADDRESS, parsedAmount],
-      chainId: baseSepolia.id,
-    });
-  };
-
   const submit = () => {
     setFormError(null);
 
@@ -180,8 +184,21 @@ export default function CreatePage() {
 
     if (isTokenMode) {
       if (parsedAmount === 0n) return setFormError("Please enter a token amount.");
-      if (needsApproval) return setFormError("Please approve the token first.");
 
+      // If needs approval, start approve flow then auto-create receipt after
+      if (needsApproval) {
+        setPendingCreateAfterApproval(true);
+        writeApproval({
+          address: tokenTrimmed as `0x${string}`,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [CONTRACT_ADDRESS, parsedAmount],
+          chainId: baseSepolia.id,
+        });
+        return;
+      }
+
+      // Already approved, create receipt directly
       writeReceipt({
         address: CONTRACT_ADDRESS,
         abi: onchainReceiptAbi,
@@ -198,6 +215,7 @@ export default function CreatePage() {
       return;
     }
 
+    // ETH transfer
     writeReceipt({
       address: CONTRACT_ADDRESS,
       abi: onchainReceiptAbi,
@@ -411,17 +429,7 @@ export default function CreatePage() {
                 </div>
               )}
 
-              {isTokenMode && needsApproval && (
-                <button
-                  className="w-full rounded-lg border border-border bg-card py-3.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-60"
-                  disabled={!isConnected || !isOnBaseSepolia || approvalPending || isSubmitting || isConfirming}
-                  onClick={approveToken}
-                >
-                  {approvalPending ? "Approving..." : "Approve Token"}
-                </button>
-              )}
-
-              {/* Submit Button */}
+              {/* Submit Button - handles both approve and create in one flow */}
               <button
                 className="w-full rounded-lg bg-foreground py-3.5 text-sm font-medium text-background hover:opacity-90 transition-opacity disabled:opacity-60"
                 disabled={
@@ -430,18 +438,23 @@ export default function CreatePage() {
                   !isOnBaseSepolia ||
                   isSubmitting ||
                   isConfirming ||
-                  approvalPending ||
-                  (isTokenMode && needsApproval)
+                  approvalPending
                 }
                 onClick={submit}
               >
                 {isIdrxMode
                   ? "Settlement available on Base mainnet"
-                  : isSubmitting
-                    ? "Confirm in wallet..."
-                    : isConfirming
-                      ? "Creating receipt..."
-                      : "Create Receipt"}
+                  : isApproving
+                    ? "Approve in wallet..."
+                    : isApprovalConfirming || pendingCreateAfterApproval
+                      ? "Approving token..."
+                      : isSubmitting
+                        ? "Confirm in wallet..."
+                        : isConfirming
+                          ? "Creating receipt..."
+                          : isTokenMode && needsApproval
+                            ? "Approve & Create Receipt"
+                            : "Create Receipt"}
               </button>
 
               <p className="text-xs text-muted-foreground text-center">
